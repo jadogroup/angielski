@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Angielskie fiszki</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 30px 16px;
+    background: #f4f5fb;
+    color: #202938;
+    font-family: Arial, sans-serif;
+  }
+  main { max-width: 680px; margin: auto; }
+  h1, h2 { margin-top: 0; }
+  .panel {
+    margin: 18px 0;
+    padding: 22px;
+    background: white;
+    border: 1px solid #e2e5ee;
+    border-radius: 16px;
+  }
+  .inputs { display: flex; gap: 10px; flex-wrap: wrap; }
+  input {
+    flex: 1 1 180px;
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid #cbd0dc;
+    border-radius: 9px;
+    font-size: 16px;
+  }
+  button {
+    padding: 11px 16px;
+    border: 0;
+    border-radius: 9px;
+    background: #6754db;
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  button:hover { filter: brightness(.94); }
+  .secondary { background: #eeecff; color: #5140c2; }
+  .card {
+    min-height: 200px;
+    padding: 25px;
+    border: 1px solid #e2e5ee;
+    border-radius: 12px;
+    text-align: center;
+  }
+  .label { color: #697586; font-size: 14px; }
+  .word { margin: 12px 0; font-size: 42px; font-weight: bold; }
+  .answer { color: #5140c2; font-size: 22px; font-weight: bold; }
+  .actions { display: flex; justify-content: center; gap: 10px; margin-top: 14px; }
+  .stats { margin-bottom: 12px; color: #697586; }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-top: 1px solid #e8eaf0;
+  }
+  .row small { display: block; color: #697586; }
+  .delete { padding: 7px 10px; background: #fff0f1; color: #ae3945; font-size: 14px; }
+  #message { color: #ae3945; }
+  @media (max-width: 500px) {
+    .word { font-size: 34px; }
+    .actions button { flex: 1; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Angielskie fiszki</h1>
+  <p>Dodaj słówka i ćwicz je w swoim tempie.</p>
+
+  <section class="panel">
+    <h2>Dodaj nowe słówko</h2>
+    <form id="form" class="inputs">
+      <input id="english" placeholder="Słówko po angielsku, np. apple" required>
+      <input id="polish" placeholder="Tłumaczenie, np. jabłko" required>
+      <button type="submit">Dodaj</button>
+    </form>
+    <p id="message"></p>
+  </section>
+
+  <section class="panel">
+    <h2>Test wiedzy</h2>
+    <div id="stats" class="stats"></div>
+    <div id="card" class="card"></div>
+    <div id="actions" class="actions"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Twoje słówka <span id="count"></span></h2>
+    <div id="list"></div>
+  </section>
+</main>
+
+<script>
+  const STORAGE_KEY = "angielskie-fiszki";
+  let words = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+  let currentId = null;
+  let lastId = null;
+  let revealed = false;
+
+  function save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(words));
+  }
+
+  function activeWords() {
+    return words.filter(word => word.streak < 3);
+  }
+
+  function chooseWord() {
+    const active = activeWords();
+    if (active.length === 0) return null;
+
+    let choices = active.filter(word => word.id !== lastId);
+    if (choices.length === 0) choices = active;
+
+    const word = choices[Math.floor(Math.random() * choices.length)];
+    currentId = word.id;
+    return word;
+  }
+
+  function render() {
+    renderList();
+
+    const active = activeWords();
+    document.getElementById("stats").textContent =
+      `Do nauki: ${active.length} · Opanowane: ${words.length - active.length}`;
+
+    let word = words.find(item => item.id === currentId && item.streak < 3);
+    if (!word) word = chooseWord();
+
+    const card = document.getElementById("card");
+    const actions = document.getElementById("actions");
+    actions.innerHTML = "";
+
+    if (!word) {
+      card.innerHTML = words.length
+        ? '<p class="label">Gotowe!</p><div class="word">Wszystkie słówka opanowane 🎉</div>'
+        : '<p class="label">Dodaj pierwsze słówko, żeby zacząć.</p>';
+      return;
+    }
+
+    card.innerHTML = `
+      <div class="label">Przetłumacz na angielski</div>
+      <div class="word"></div>
+      <div class="label">Umiem: ${word.streak}/3</div>
+      <div class="answer" id="answer" style="display:${revealed ? "block" : "none"}"></div>
+    `;
+    card.querySelector(".word").textContent = word.pl;
+    document.getElementById("answer").textContent = word.en;
+
+    if (!revealed) {
+      const show = document.createElement("button");
+      show.textContent = "Pokaż tłumaczenie";
+      show.onclick = () => {
+        revealed = true;
+        render();
+      };
+      actions.appendChild(show);
+    } else {
+      const no = document.createElement("button");
+      no.textContent = "Nie umiem";
+      no.className = "secondary";
+      no.onclick = () => answer(false);
+
+      const yes = document.createElement("button");
+      yes.textContent = "Umiem";
+      yes.onclick = () => answer(true);
+
+      actions.append(no, yes);
+    }
+  }
+
+  function answer(know) {
+    const word = words.find(item => item.id === currentId);
+    if (!word) return;
+
+    lastId = word.id;
+    word.streak = know ? word.streak + 1 : 0;
+    currentId = null;
+    revealed = false;
+    save();
+    render();
+  }
+
+  function renderList() {
+    const list = document.getElementById("list");
+    list.innerHTML = "";
+    document.getElementById("count").textContent = `(${words.length})`;
+
+    if (words.length === 0) {
+      list.textContent = "Lista jest pusta.";
+      return;
+    }
+
+    words.forEach(word => {
+      const row = document.createElement("div");
+      row.className = "row";
+
+      const info = document.createElement("div");
+      const english = document.createElement("strong");
+      english.textContent = word.en;
+      const polish = document.createElement("small");
+      polish.textContent = `${word.pl} · ${word.streak === 3 ? "Opanowane ✓" : `${word.streak}/3 razy „Umiem”`}`;
+      info.append(english, polish);
+
+      const remove = document.createElement("button");
+      remove.className = "delete";
+      remove.textContent = "Usuń";
+      remove.onclick = () => {
+        words = words.filter(item => item.id !== word.id);
+        if (currentId === word.id) currentId = null;
+        save();
+        render();
+      };
+
+      row.append(info, remove);
+      list.appendChild(row);
+    });
+  }
+
+  document.getElementById("form").addEventListener("submit", event => {
+    event.preventDefault();
+
+    const en = document.getElementById("english").value.trim();
+    const pl = document.getElementById("polish").value.trim();
+    const message = document.getElementById("message");
+
+    if (words.some(word => word.en.toLowerCase() === en.toLowerCase())) {
+      message.textContent = "To słówko jest już na liście.";
+      return;
+    }
+
+    words.push({
+      id: Date.now().toString() + Math.random().toString(16).slice(2),
+      en,
+      pl,
+      streak: 0
+    });
+
+    message.textContent = "";
+    event.target.reset();
+    save();
+    render();
+  });
+
+  render();
+</script>
+</body>
+</html>
