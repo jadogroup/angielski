@@ -16,7 +16,7 @@
     }
 
     main {
-      max-width: 680px;
+      max-width: 720px;
       margin: auto;
     }
 
@@ -36,12 +36,13 @@
       flex-wrap: wrap;
     }
 
-    input {
-      flex: 1 1 180px;
+    input, select {
+      flex: 1 1 160px;
       min-width: 0;
       padding: 12px;
       border: 1px solid #cbd0dc;
       border-radius: 9px;
+      background: white;
       font-size: 16px;
     }
 
@@ -101,6 +102,10 @@
       color: #697586;
     }
 
+    .quiz-options {
+      margin-bottom: 14px;
+    }
+
     .word-list-heading {
       display: flex;
       align-items: center;
@@ -145,20 +150,35 @@
 <body>
 <main>
   <h1>Angielskie fiszki</h1>
-  <p>Dodaj słówka i ćwicz je w swoim tempie.</p>
+  <p>Dodaj słówka do kategorii i ćwicz wybrany dział.</p>
 
   <section class="panel">
     <h2>Dodaj nowe słówko</h2>
+
     <form id="form" class="inputs">
       <input id="english" placeholder="Słówko po angielsku, np. apple" required>
       <input id="polish" placeholder="Tłumaczenie, np. jabłko" required>
+      <input
+        id="category"
+        list="category-options"
+        placeholder="Kategoria, np. Jedzenie"
+        required
+      >
+      <datalist id="category-options"></datalist>
       <button type="submit">Dodaj</button>
     </form>
+
     <p id="message"></p>
   </section>
 
   <section class="panel">
     <h2>Test wiedzy</h2>
+
+    <div class="quiz-options">
+      <label for="category-filter">Ucz się z kategorii:</label>
+      <select id="category-filter"></select>
+    </div>
+
     <div id="stats" class="stats"></div>
     <div id="card" class="card"></div>
     <div id="actions" class="actions"></div>
@@ -186,16 +206,75 @@
     words = [];
   }
 
+  // Słówka z wcześniejszej wersji strony dostaną kategorię „Ogólne”.
+  words = words.map(word => ({
+    ...word,
+    category: word.category || "Ogólne",
+    streak: Number(word.streak) || 0
+  }));
+
   let currentId = null;
   let lastId = null;
   let revealed = false;
+
+  const categoryFilter = document.getElementById("category-filter");
 
   function save() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(words));
   }
 
+  function categories() {
+    return [...new Set(words.map(word => word.category))]
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, "pl"));
+  }
+
+  function updateCategoryMenus() {
+    const allCategories = categories();
+    const previousFilter = categoryFilter.value;
+
+    categoryFilter.innerHTML = "";
+
+    const allOption = document.createElement("option");
+    allOption.value = "Wszystkie";
+    allOption.textContent = "Wszystkie kategorie";
+    categoryFilter.appendChild(allOption);
+
+    allCategories.forEach(category => {
+      const option = document.createElement("option");
+      option.value = category;
+      option.textContent = category;
+      categoryFilter.appendChild(option);
+    });
+
+    if ([...categoryFilter.options].some(option => option.value === previousFilter)) {
+      categoryFilter.value = previousFilter;
+    } else {
+      categoryFilter.value = "Wszystkie";
+    }
+
+    const datalist = document.getElementById("category-options");
+    datalist.innerHTML = "";
+
+    allCategories.forEach(category => {
+      const option = document.createElement("option");
+      option.value = category;
+      datalist.appendChild(option);
+    });
+  }
+
+  function wordsInSelectedCategory() {
+    const selected = categoryFilter.value;
+
+    if (selected === "Wszystkie") {
+      return words;
+    }
+
+    return words.filter(word => word.category === selected);
+  }
+
   function activeWords() {
-    return words.filter(word => word.streak < 3);
+    return wordsInSelectedCategory().filter(word => word.streak < 3);
   }
 
   function chooseWord() {
@@ -211,14 +290,20 @@
   }
 
   function render() {
+    updateCategoryMenus();
     renderList();
 
+    const selectedWords = wordsInSelectedCategory();
     const active = activeWords();
+
     document.getElementById("stats").textContent =
-      `Do nauki: ${active.length} · Opanowane: ${words.length - active.length}`;
+      `Do nauki: ${active.length} · Opanowane: ${selectedWords.length - active.length}`;
 
     let word = words.find(item =>
-      item.id === currentId && item.streak < 3
+      item.id === currentId &&
+      item.streak < 3 &&
+      (categoryFilter.value === "Wszystkie" ||
+       item.category === categoryFilter.value)
     );
 
     if (!word) word = chooseWord();
@@ -228,13 +313,16 @@
     actions.innerHTML = "";
 
     if (!word) {
-      card.innerHTML = words.length
-        ? '<p class="label">Gotowe!</p><div class="word">Wszystkie słówka opanowane 🎉</div>'
-        : '<p class="label">Dodaj pierwsze słówko, żeby zacząć.</p>';
+      card.innerHTML = selectedWords.length
+        ? '<p class="label">Gotowe!</p><div class="word">Wszystkie słówka z tej kategorii opanowane 🎉</div>'
+        : '<p class="label">W tej kategorii nie ma jeszcze słówek.</p>';
       return;
     }
 
     card.innerHTML = `
+      <div class="label">
+        Kategoria: ${escapeHtml(word.category)}
+      </div>
       <div class="label">Przetłumacz na angielski</div>
       <div class="word"></div>
       <div class="label">Umiem: ${word.streak}/3</div>
@@ -267,6 +355,12 @@
     }
   }
 
+  function escapeHtml(text) {
+    const element = document.createElement("span");
+    element.textContent = text;
+    return element.innerHTML;
+  }
+
   function answer(know) {
     const word = words.find(item => item.id === currentId);
     if (!word) return;
@@ -280,8 +374,15 @@
   }
 
   function repeatMasteredWords() {
+    const selected = categoryFilter.value;
+
     words.forEach(word => {
-      if (word.streak === 3) word.streak = 0;
+      const isInSelectedCategory =
+        selected === "Wszystkie" || word.category === selected;
+
+      if (isInSelectedCategory && word.streak === 3) {
+        word.streak = 0;
+      }
     });
 
     currentId = null;
@@ -292,11 +393,15 @@
   }
 
   function updateRepeatButton() {
-    const button = document.getElementById("repeat");
-    const masteredCount = words.filter(word => word.streak === 3).length;
+    const selected = categoryFilter.value;
+    const mastered = words.filter(word =>
+      word.streak === 3 &&
+      (selected === "Wszystkie" || word.category === selected)
+    ).length;
 
-    button.style.display = masteredCount > 0 ? "inline-block" : "none";
-    button.textContent = `Jeszcze raz (${masteredCount})`;
+    const button = document.getElementById("repeat");
+    button.style.display = mastered > 0 ? "inline-block" : "none";
+    button.textContent = `Jeszcze raz (${mastered})`;
   }
 
   function renderList() {
@@ -320,11 +425,10 @@
 
       const polish = document.createElement("small");
       polish.textContent =
-        `${word.pl} · ${
-          word.streak === 3
-            ? "Opanowane ✓"
-            : `${word.streak}/3 razy „Umiem”`
-        }`;
+        `${word.pl} · Kategoria: ${word.category} · ` +
+        (word.streak === 3
+          ? "Opanowane ✓"
+          : `${word.streak}/3 razy „Umiem”`);
 
       info.append(english, polish);
 
@@ -347,15 +451,27 @@
 
   document.getElementById("repeat").onclick = repeatMasteredWords;
 
+  categoryFilter.addEventListener("change", () => {
+    currentId = null;
+    lastId = null;
+    revealed = false;
+    render();
+  });
+
   document.getElementById("form").addEventListener("submit", event => {
     event.preventDefault();
 
     const en = document.getElementById("english").value.trim();
     const pl = document.getElementById("polish").value.trim();
+    const category =
+      document.getElementById("category").value.trim() || "Ogólne";
     const message = document.getElementById("message");
 
-    if (words.some(word => word.en.toLowerCase() === en.toLowerCase())) {
-      message.textContent = "To słówko jest już na liście.";
+    if (words.some(word =>
+      word.en.toLowerCase() === en.toLowerCase() &&
+      word.category.toLowerCase() === category.toLowerCase()
+    )) {
+      message.textContent = "To słówko jest już w tej kategorii.";
       return;
     }
 
@@ -363,6 +479,7 @@
       id: Date.now().toString() + Math.random().toString(16).slice(2),
       en,
       pl,
+      category,
       streak: 0
     });
 
