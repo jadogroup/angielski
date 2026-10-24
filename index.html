@@ -1,76 +1,82 @@
 <!DOCTYPE html>
 <html lang="pl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Angielskie fiszki</title>
-<style>
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    padding: 30px 16px;
-    background: #f4f5fb;
-    color: #202938;
-    font-family: Arial, sans-serif;
-  }
-  main { max-width: 680px; margin: auto; }
-  h1, h2 { margin-top: 0; }
-  .panel {
-    margin: 18px 0;
-    padding: 22px;
-    background: white;
-    border: 1px solid #e2e5ee;
-    border-radius: 16px;
-  }
-  .inputs { display: flex; gap: 10px; flex-wrap: wrap; }
-  input {
-    flex: 1 1 180px;
-    min-width: 0;
-    padding: 12px;
-    border: 1px solid #cbd0dc;
-    border-radius: 9px;
-    font-size: 16px;
-  }
-  button {
-    padding: 11px 16px;
-    border: 0;
-    border-radius: 9px;
-    background: #6754db;
-    color: white;
-    font-size: 16px;
-    font-weight: bold;
-    cursor: pointer;
-  }
-  button:hover { filter: brightness(.94); }
-  .secondary { background: #eeecff; color: #5140c2; }
-  .card {
-    min-height: 200px;
-    padding: 25px;
-    border: 1px solid #e2e5ee;
-    border-radius: 12px;
-    text-align: center;
-  }
-  .label { color: #697586; font-size: 14px; }
-  .word { margin: 12px 0; font-size: 42px; font-weight: bold; }
-  .answer { color: #5140c2; font-size: 22px; font-weight: bold; }
-  .actions { display: flex; justify-content: center; gap: 10px; margin-top: 14px; }
-  .stats { margin-bottom: 12px; color: #697586; }
-  .row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 0;
-    border-top: 1px solid #e8eaf0;
-  }
-  .row small { display: block; color: #697586; }
-  .delete { padding: 7px 10px; background: #fff0f1; color: #ae3945; font-size: 14px; }
-  #message { color: #ae3945; }
-  @media (max-width: 500px) {
-    .word { font-size: 34px; }
-    .actions button { flex: 1; }
-  }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Angielskie fiszki</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 30px 16px;
+      background: #f4f5fb;
+      color: #202938;
+      font-family: Arial, sans-serif;
+    }
+    main { max-width: 680px; margin: auto; }
+    h1, h2 { margin-top: 0; }
+    .panel {
+      margin: 18px 0;
+      padding: 22px;
+      background: white;
+      border: 1px solid #e2e5ee;
+      border-radius: 16px;
+    }
+    .inputs { display: flex; gap: 10px; flex-wrap: wrap; }
+    input {
+      flex: 1 1 180px;
+      min-width: 0;
+      padding: 12px;
+      border: 1px solid #cbd0dc;
+      border-radius: 9px;
+      font-size: 16px;
+    }
+    button {
+      padding: 11px 16px;
+      border: 0;
+      border-radius: 9px;
+      background: #6754db;
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:hover { filter: brightness(.94); }
+    .secondary { background: #eeecff; color: #5140c2; }
+    .card {
+      min-height: 200px;
+      padding: 25px;
+      border: 1px solid #e2e5ee;
+      border-radius: 12px;
+      text-align: center;
+    }
+    .label { color: #697586; font-size: 14px; }
+    .word { margin: 12px 0; font-size: 42px; font-weight: bold; }
+    .answer { color: #5140c2; font-size: 22px; font-weight: bold; }
+    .actions {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+    .stats { margin-bottom: 12px; color: #697586; }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 0;
+      border-top: 1px solid #e8eaf0;
+    }
+    .row small { display: block; color: #697586; }
+    .delete { padding: 7px 10px; background: #fff0f1; color: #ae3945; font-size: 14px; }
+    #message { color: #ae3945; }
+    @media (max-width: 500px) {
+      .word { font-size: 34px; }
+      .actions button { flex: 1; }
+    }
+  </style>
 </head>
 <body>
 <main>
@@ -145,6 +151,8 @@
       card.innerHTML = words.length
         ? '<p class="label">Gotowe!</p><div class="word">Wszystkie słówka opanowane 🎉</div>'
         : '<p class="label">Dodaj pierwsze słówko, żeby zacząć.</p>';
+
+      addRepeatButton(actions);
       return;
     }
 
@@ -177,6 +185,31 @@
 
       actions.append(no, yes);
     }
+
+    addRepeatButton(actions);
+  }
+
+  function addRepeatButton(actions) {
+    const masteredCount = words.filter(word => word.streak === 3).length;
+    if (masteredCount === 0) return;
+
+    const repeat = document.createElement("button");
+    repeat.className = "secondary";
+    repeat.textContent = `Jeszcze raz — opanowane: ${masteredCount}`;
+    repeat.onclick = repeatMasteredWords;
+    actions.appendChild(repeat);
+  }
+
+  function repeatMasteredWords() {
+    words.forEach(word => {
+      if (word.streak === 3) word.streak = 0;
+    });
+
+    currentId = null;
+    lastId = null;
+    revealed = false;
+    save();
+    render();
   }
 
   function answer(know) {
@@ -184,7 +217,7 @@
     if (!word) return;
 
     lastId = word.id;
-    word.streak = know ? word.streak + 1 : 0;
+    word.streak = know ? Math.min(3, word.streak + 1) : 0;
     currentId = null;
     revealed = false;
     save();
@@ -208,8 +241,11 @@
       const info = document.createElement("div");
       const english = document.createElement("strong");
       english.textContent = word.en;
+
       const polish = document.createElement("small");
-      polish.textContent = `${word.pl} · ${word.streak === 3 ? "Opanowane ✓" : `${word.streak}/3 razy „Umiem”`}`;
+      polish.textContent =
+        `${word.pl} · ${word.streak === 3 ? "Opanowane ✓" : `${word.streak}/3 razy „Umiem”`}`;
+
       info.append(english, polish);
 
       const remove = document.createElement("button");
