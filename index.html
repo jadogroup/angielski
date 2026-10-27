@@ -64,7 +64,6 @@ button:disabled{opacity:.6;cursor:wait}
 .preview-table th{font-size:.85rem;color:var(--muted)}
 .preview-table input{min-width:120px}
 .preview-table td:last-child{width:1%}
-.preview-wrap{overflow-x:auto;margin-top:14px}
 .hidden{display:none!important}
 footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
 @media(max-width:700px){
@@ -114,8 +113,8 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
 
     <div class="bulk-tools">
       <div>
-        <label for="photo-input">Albo wybierz zdjęcie strony z listą słówek</label>
-        <input id="photo-input" type="file" accept="image/*" capture="environment">
+        <label for="photo-input">Wybierz zdjęcie strony z listą słówek</label>
+        <input id="photo-input" type="file" accept="image/*">
       </div>
       <button id="ocr-button" class="subtle" type="button">Odczytaj tekst ze zdjęcia</button>
     </div>
@@ -125,6 +124,14 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
     <textarea id="bulk-text" placeholder="surprised - zaskoczony&#10;dangerous - niebezpieczny&#10;improve - poprawiać"></textarea>
 
     <div class="bulk-tools">
+      <div>
+        <label for="word-order">Kolejność w wierszach</label>
+        <select id="word-order">
+          <option value="auto">Wykryj automatycznie</option>
+          <option value="en-first">Najpierw angielski</option>
+          <option value="pl-first">Najpierw polski</option>
+        </select>
+      </div>
       <div>
         <label for="bulk-category">Kategoria dla słówek z listy</label>
         <input id="bulk-category" list="category-options" placeholder="np. Nowe słówka" maxlength="60">
@@ -465,12 +472,19 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
       parts = line.split(/\s*[–—-]\s*/);
     }
 
-    if (parts.length < 2) return [line.trim(), ""];
+    if (parts.length < 2) {
+      const match = line.trim().match(/^(\S+)\s+(.+)$/);
+      if (!match) return [line.trim(), ""];
+      parts = [match[1], match[2]];
+    }
 
     const left = parts.shift().trim();
     const right = parts.join(" - ").trim();
+    const order = document.querySelector("#word-order").value;
     const polishCharacters = /[ąćęłńóśźż]/i;
 
+    if (order === "pl-first") return [right, left];
+    if (order === "en-first") return [left, right];
     if (polishCharacters.test(left) && !polishCharacters.test(right)) {
       return [right, left];
     }
@@ -617,6 +631,45 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
   document.querySelector("#preview-button")
     .addEventListener("click", showPreview);
 
+  async function prepareImage(file) {
+    if (!window.createImageBitmap) return file;
+
+    const bitmap = await createImageBitmap(file);
+    const maxSide = 2600;
+    const scale = Math.min(
+      2,
+      Math.max(1, maxSide / Math.max(bitmap.width, bitmap.height))
+    );
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+
+    for (let i = 0; i < pixels.data.length; i += 4) {
+      const gray =
+        0.299 * pixels.data[i] +
+        0.587 * pixels.data[i + 1] +
+        0.114 * pixels.data[i + 2];
+
+      const contrast = Math.max(0, Math.min(255, (gray - 128) * 1.25 + 128));
+      pixels.data[i] = contrast;
+      pixels.data[i + 1] = contrast;
+      pixels.data[i + 2] = contrast;
+    }
+
+    context.putImageData(pixels, 0, 0);
+    return canvas;
+  }
+
+  document.querySelector("#preview-button")
+    .addEventListener("click", showPreview);
+
   ocrButton.addEventListener("click", async () => {
     const file = photoInput.files && photoInput.files[0];
 
@@ -646,7 +699,9 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
         }
       });
 
-      const result = await worker.recognize(file);
+      ocrStatus.textContent = "Poprawiam zdjęcie przed odczytem…";
+      const image = await prepareImage(file);
+      const result = await worker.recognize(image);
       const recognized = (result.data.text || "").trim();
 
       if (!recognized) {
@@ -655,32 +710,16 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
         return;
       }
 
-      // Jeśli OCR odczyta parę jako dwa wyrazy rozdzielone spacją,
-      // wstawia separator, żeby można było sprawdzić parę w podglądzie.
-      const prepared = recognized
-        .split(/\r?\n/)
-        .map(line => {
-          const clean = line.trim();
-
-          if (!clean || /\t|\s+[–—-]\s+|[:;|]/.test(clean)) {
-            return clean;
-          }
-
-          const match = clean.match(/^(\S+)\s+(.+)$/);
-          return match ? `${match[1]} - ${match[2]}` : clean;
-        })
-        .join("\n");
-
       const textarea = document.querySelector("#bulk-text");
       textarea.value = textarea.value.trim()
-        ? textarea.value.trim() + "\n" + prepared
-        : prepared;
+        ? textarea.value.trim() + "\n" + recognized
+        : recognized;
 
       ocrStatus.textContent =
-        "Tekst odczytany. Kliknij „Pokaż podgląd”, sprawdź pary i popraw błędy przed dodaniem.";
+        "Tekst odczytany. Sprawdź kolejność języków i popraw błędy, potem kliknij „Pokaż podgląd”. Układ kolumn może wymagać ręcznej korekty.";
     } catch {
       ocrStatus.textContent =
-        "Odczyt się nie powiódł. Sprawdź połączenie z internetem lub spróbuj wyraźniejszego zdjęcia.";
+        "Odczyt się nie powiódł. Sprawdź internet lub spróbuj wyraźniejszego zdjęcia.";
     } finally {
       if (worker) await worker.terminate();
       ocrButton.disabled = false;
