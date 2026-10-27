@@ -21,7 +21,6 @@ textarea{min-height:150px;resize:vertical}
 input:focus,select:focus,textarea:focus{border-color:var(--purple);box-shadow:0 0 0 3px #6754db22}
 button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:11px 16px;cursor:pointer;transition:transform .08s,background .15s}
 button:active{transform:translateY(1px)}
-button:disabled{opacity:.6;cursor:wait}
 .primary{background:var(--purple);color:white}
 .primary:hover{background:var(--purple-dark)}
 .subtle{background:#f0efff;color:var(--purple-dark)}
@@ -79,7 +78,7 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
 <body>
 <main class="wrap">
 <header>
-  <h1>Angielskie fiszki</h1>
+  <h1>Learnis</h1>
   <p>Dodawaj słówka pojedynczo albo wklej całą listę. Wybierz kategorię i ucz się działami.</p>
 </header>
 
@@ -112,19 +111,8 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
     Nagłówki działów są wykrywane automatycznie i przypisywane kolejnym słówkom.
     W podglądzie możesz zmienić typ wiersza lub kategorię.
   </p>
-
-  <div class="bulk-tools">
-    <div>
-      <label for="photo-input">Wybierz zdjęcie strony z listą słówek</label>
-      <input id="photo-input" type="file" accept="image/*">
-    </div>
-    <button id="ocr-button" class="subtle" type="button">Odczytaj tekst ze zdjęcia</button>
-  </div>
-  <p id="ocr-status" class="form-message" aria-live="polite"></p>
-
-  <label for="bulk-text">Tekst listy</label>
+  <label for="bulk-text">Lista słówek</label>
   <textarea id="bulk-text" placeholder="surprised - zaskoczony&#10;dangerous - niebezpieczny&#10;improve - poprawiać"></textarea>
-
   <div class="bulk-tools">
     <div>
       <label for="word-order">Kolejność w wierszach</label>
@@ -140,7 +128,6 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
     </div>
     <button id="preview-button" class="subtle" type="button">Pokaż podgląd</button>
   </div>
-
   <div id="preview-area" class="hidden"></div>
   <p id="bulk-message" class="form-message" aria-live="polite"></p>
 </section>
@@ -167,7 +154,6 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
 <footer>Lista i postęp zapisują się automatycznie w tej przeglądarce.</footer>
 </main>
 
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
 (() => {
   const KEY = "angielskie-fiszki-v1";
@@ -185,9 +171,6 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
   const count = document.querySelector("#list-count");
   const filter = document.querySelector("#quiz-category");
   const repeatButton = document.querySelector("#repeat-button");
-  const photoInput = document.querySelector("#photo-input");
-  const ocrButton = document.querySelector("#ocr-button");
-  const ocrStatus = document.querySelector("#ocr-status");
 
   let words = [];
   let currentId = null;
@@ -272,10 +255,10 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
 
   function chooseWord() {
     const active = activeWords();
-    if (!active.length) return null;
+    if (active.length === 0) return null;
 
     let choices = active.filter(word => word.id !== lastId);
-    if (!choices.length) choices = active;
+    if (choices.length === 0) choices = active;
 
     const chosen = choices[Math.floor(Math.random() * choices.length)];
     currentId = chosen.id;
@@ -290,6 +273,7 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
     const todo = activeWords();
 
     stats.replaceChildren();
+
     [`Do nauki: ${todo.length}`, `Opanowane: ${pool.length - todo.length}`]
       .forEach(text => {
         const pill = document.createElement("span");
@@ -401,7 +385,7 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
     repeatButton.textContent = `Jeszcze raz (${mastered})`;
     list.replaceChildren();
 
-    if (!words.length) {
+    if (words.length === 0) {
       const empty = document.createElement("div");
       empty.className = "empty";
       empty.textContent = "Twoja lista jest pusta. Dodaj pierwsze słówko powyżej.";
@@ -559,13 +543,13 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
 
   function showPreview() {
     const area = document.querySelector("#preview-area");
-    const message = document.querySelector("#bulk-message");
+    const bulkMessage = document.querySelector("#bulk-message");
 
     previewRows = parseText(document.querySelector("#bulk-text").value);
-    message.textContent = "";
+    bulkMessage.textContent = "";
 
-    if (!previewRows.length) {
-      message.textContent = "Wklej najpierw listę słówek.";
+    if (previewRows.length === 0) {
+      bulkMessage.textContent = "Wklej najpierw listę słówek.";
       area.classList.add("hidden");
       return;
     }
@@ -722,98 +706,6 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
 
   document.querySelector("#preview-button")
     .addEventListener("click", showPreview);
-
-  async function prepareImage(file) {
-    if (!window.createImageBitmap) return file;
-
-    const bitmap = await createImageBitmap(file);
-    const maxSide = 2600;
-    const scale = Math.min(
-      2,
-      Math.max(1, maxSide / Math.max(bitmap.width, bitmap.height))
-    );
-
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close();
-
-    const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
-
-    for (let i = 0; i < pixels.data.length; i += 4) {
-      const gray =
-        0.299 * pixels.data[i] +
-        0.587 * pixels.data[i + 1] +
-        0.114 * pixels.data[i + 2];
-
-      const contrast = Math.max(0, Math.min(255, (gray - 128) * 1.25 + 128));
-      pixels.data[i] = contrast;
-      pixels.data[i + 1] = contrast;
-      pixels.data[i + 2] = contrast;
-    }
-
-    context.putImageData(pixels, 0, 0);
-    return canvas;
-  }
-
-  ocrButton.addEventListener("click", async () => {
-    const file = photoInput.files && photoInput.files[0];
-
-    if (!file) {
-      ocrStatus.textContent = "Najpierw wybierz zdjęcie.";
-      return;
-    }
-
-    if (!window.Tesseract) {
-      ocrStatus.textContent =
-        "Nie udało się załadować OCR. Sprawdź połączenie z internetem i odśwież stronę.";
-      return;
-    }
-
-    ocrButton.disabled = true;
-    ocrStatus.textContent = "Uruchamiam rozpoznawanie tekstu…";
-
-    let worker;
-
-    try {
-      worker = await Tesseract.createWorker("eng+pol", 1, {
-        logger: progress => {
-          if (progress.status === "recognizing text") {
-            const percent = Math.round((progress.progress || 0) * 100);
-            ocrStatus.textContent = `Odczytuję tekst ze zdjęcia: ${percent}%`;
-          }
-        }
-      });
-
-      ocrStatus.textContent = "Poprawiam zdjęcie przed odczytem…";
-      const image = await prepareImage(file);
-      const result = await worker.recognize(image);
-      const recognized = (result.data.text || "").trim();
-
-      if (!recognized) {
-        ocrStatus.textContent =
-          "Nie udało się odczytać tekstu. Spróbuj wyraźniejszego zdjęcia.";
-        return;
-      }
-
-      const textarea = document.querySelector("#bulk-text");
-      textarea.value = textarea.value.trim()
-        ? textarea.value.trim() + "\n" + recognized
-        : recognized;
-
-      ocrStatus.textContent =
-        "Tekst odczytany. Sprawdź kolejność języków i popraw błędy, potem kliknij „Pokaż podgląd”. Układ kolumn może wymagać ręcznej korekty.";
-    } catch {
-      ocrStatus.textContent =
-        "Odczyt się nie powiódł. Sprawdź internet lub spróbuj wyraźniejszego zdjęcia.";
-    } finally {
-      if (worker) await worker.terminate();
-      ocrButton.disabled = false;
-    }
-  });
 
   filter.addEventListener("change", () => {
     currentId = null;
