@@ -21,6 +21,7 @@ textarea{min-height:150px;resize:vertical}
 input:focus,select:focus,textarea:focus{border-color:var(--purple);box-shadow:0 0 0 3px #6754db22}
 button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:11px 16px;cursor:pointer;transition:transform .08s,background .15s}
 button:active{transform:translateY(1px)}
+button:disabled{opacity:.6;cursor:wait}
 .primary{background:var(--purple);color:white}
 .primary:hover{background:var(--purple-dark)}
 .subtle{background:#f0efff;color:var(--purple-dark)}
@@ -58,12 +59,12 @@ button:active{transform:translateY(1px)}
 .bulk-help{color:var(--muted);font-size:.9rem;margin:0 0 12px}
 .bulk-tools{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-top:12px}
 .bulk-tools>div{flex:1 1 220px}
-.preview-wrap{overflow-x:auto;margin-top:14px}
 .preview-table{width:100%;border-collapse:collapse;min-width:560px}
 .preview-table th,.preview-table td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-align:middle}
 .preview-table th{font-size:.85rem;color:var(--muted)}
 .preview-table input{min-width:120px}
 .preview-table td:last-child{width:1%}
+.preview-wrap{overflow-x:auto;margin-top:14px}
 .hidden{display:none!important}
 footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
 @media(max-width:700px){
@@ -79,7 +80,7 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
 <main class="wrap">
   <header>
     <h1>Angielskie fiszki</h1>
-    <p>Dodawaj słówka pojedynczo albo wklej całą listę. Wybierz kategorię i ucz się działami.</p>
+    <p>Dodawaj słówka pojedynczo, wklej listę albo odczytaj ją ze zdjęcia.</p>
   </header>
 
   <section class="panel">
@@ -106,14 +107,26 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
   <section class="panel">
     <h2>Dodaj całą listę</h2>
     <p class="bulk-help">
-      Wklej po jednej parze w wierszu, np. <code>surprised - zaskoczony</code>.
+      Wklej pary w osobnych wierszach, np. <code>surprised - zaskoczony</code>.
       Możesz użyć myślnika, tabulatora, średnika lub dwukropka.
-      Polski i angielski mogą być w dowolnej kolejności. Przed dodaniem sprawdzisz i poprawisz podgląd.
+      Przed dodaniem sprawdzisz i poprawisz podgląd.
     </p>
-    <textarea id="bulk-text" placeholder="surprised - zaskoczony&#10;dangerous - niebezpieczny&#10;improve - poprawiać"></textarea>
+
     <div class="bulk-tools">
       <div>
-        <label for="bulk-category">Kategoria dla wklejanych słówek</label>
+        <label for="photo-input">Albo wybierz zdjęcie strony z listą słówek</label>
+        <input id="photo-input" type="file" accept="image/*" capture="environment">
+      </div>
+      <button id="ocr-button" class="subtle" type="button">Odczytaj tekst ze zdjęcia</button>
+    </div>
+    <p id="ocr-status" class="form-message" aria-live="polite"></p>
+
+    <label for="bulk-text">Tekst listy</label>
+    <textarea id="bulk-text" placeholder="surprised - zaskoczony&#10;dangerous - niebezpieczny&#10;improve - poprawiać"></textarea>
+
+    <div class="bulk-tools">
+      <div>
+        <label for="bulk-category">Kategoria dla słówek z listy</label>
         <input id="bulk-category" list="category-options" placeholder="np. Nowe słówka" maxlength="60">
       </div>
       <button id="preview-button" class="subtle" type="button">Pokaż podgląd</button>
@@ -144,6 +157,7 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
   <footer>Lista i postęp zapisują się automatycznie w tej przeglądarce.</footer>
 </main>
 
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
 (() => {
   const KEY = "angielskie-fiszki-v1";
@@ -161,6 +175,9 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
   const count = document.querySelector("#list-count");
   const filter = document.querySelector("#quiz-category");
   const repeatButton = document.querySelector("#repeat-button");
+  const photoInput = document.querySelector("#photo-input");
+  const ocrButton = document.querySelector("#ocr-button");
+  const ocrStatus = document.querySelector("#ocr-status");
 
   let words = [];
   let currentId = null;
@@ -369,7 +386,6 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
 
     repeatButton.hidden = masteredCount === 0;
     repeatButton.textContent = `Jeszcze raz (${masteredCount})`;
-
     list.replaceChildren();
 
     if (words.length === 0) {
@@ -539,7 +555,11 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
   function showPreviewFromRows() {
     const textarea = document.querySelector("#bulk-text");
     const oldText = textarea.value;
-    textarea.value = previewRows.map(row => `${row.en} - ${row.pl}`).join("\n");
+
+    textarea.value = previewRows
+      .map(row => `${row.en} - ${row.pl}`)
+      .join("\n");
+
     showPreview();
     textarea.value = oldText;
   }
@@ -596,6 +616,76 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
 
   document.querySelector("#preview-button")
     .addEventListener("click", showPreview);
+
+  ocrButton.addEventListener("click", async () => {
+    const file = photoInput.files && photoInput.files[0];
+
+    if (!file) {
+      ocrStatus.textContent = "Najpierw wybierz zdjęcie.";
+      return;
+    }
+
+    if (!window.Tesseract) {
+      ocrStatus.textContent =
+        "Nie udało się załadować OCR. Sprawdź połączenie z internetem i odśwież stronę.";
+      return;
+    }
+
+    ocrButton.disabled = true;
+    ocrStatus.textContent = "Uruchamiam rozpoznawanie tekstu…";
+
+    let worker;
+
+    try {
+      worker = await Tesseract.createWorker("eng+pol", 1, {
+        logger: progress => {
+          if (progress.status === "recognizing text") {
+            const percent = Math.round((progress.progress || 0) * 100);
+            ocrStatus.textContent = `Odczytuję tekst ze zdjęcia: ${percent}%`;
+          }
+        }
+      });
+
+      const result = await worker.recognize(file);
+      const recognized = (result.data.text || "").trim();
+
+      if (!recognized) {
+        ocrStatus.textContent =
+          "Nie udało się odczytać tekstu. Spróbuj wyraźniejszego zdjęcia.";
+        return;
+      }
+
+      // Jeśli OCR odczyta parę jako dwa wyrazy rozdzielone spacją,
+      // wstawia separator, żeby można było sprawdzić parę w podglądzie.
+      const prepared = recognized
+        .split(/\r?\n/)
+        .map(line => {
+          const clean = line.trim();
+
+          if (!clean || /\t|\s+[–—-]\s+|[:;|]/.test(clean)) {
+            return clean;
+          }
+
+          const match = clean.match(/^(\S+)\s+(.+)$/);
+          return match ? `${match[1]} - ${match[2]}` : clean;
+        })
+        .join("\n");
+
+      const textarea = document.querySelector("#bulk-text");
+      textarea.value = textarea.value.trim()
+        ? textarea.value.trim() + "\n" + prepared
+        : prepared;
+
+      ocrStatus.textContent =
+        "Tekst odczytany. Kliknij „Pokaż podgląd”, sprawdź pary i popraw błędy przed dodaniem.";
+    } catch {
+      ocrStatus.textContent =
+        "Odczyt się nie powiódł. Sprawdź połączenie z internetem lub spróbuj wyraźniejszego zdjęcia.";
+    } finally {
+      if (worker) await worker.terminate();
+      ocrButton.disabled = false;
+    }
+  });
 
   filter.addEventListener("change", () => {
     currentId = null;
