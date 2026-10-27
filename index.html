@@ -1,38 +1,861 @@
-function parseLine(line) {
-  let parts = line.split(/\t+|\s+[–—-]\s+|\s*[:;|]\s*/);
-
-  if (parts.length < 2) {
-    parts = line.split(/\s*[–—-]\s*/);
-  }
-
-  if (parts.length < 2) {
-    const match = line.trim().match(/^(\S+)\s+(.+)$/);
-    if (!match) return [line.trim(), ""];
-    parts = [match[1], match[2]];
-  }
-
-  let left = parts.shift().trim();
-  let right = parts.join(" - ").trim();
-
-  function removePronunciation(text) {
-    return text
-      .replace(/\[[^\]]*\]/g, " ")
-      .replace(/\/[^/]+\//g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-
-  left = removePronunciation(left);
-  right = removePronunciation(right);
-
-  const order = document.querySelector("#word-order").value;
-  const polishCharacters = /[ąćęłńóśźż]/i;
-
-  if (order === "pl-first") return [right, left];
-  if (order === "en-first") return [left, right];
-  if (polishCharacters.test(left) && !polishCharacters.test(right)) {
-    return [right, left];
-  }
-
-  return [left, right];
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Angielskie fiszki</title>
+<style>
+:root{color-scheme:light;--ink:#202938;--muted:#697586;--line:#e4e8ef;--purple:#6754db;--purple-dark:#5140c2;--bg:#f5f6fb;--green:#16794b;--red:#ae3945}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{width:min(820px,100% - 32px);margin:40px auto 60px}
+header{margin-bottom:24px}
+h1{font-size:clamp(1.8rem,5vw,2.4rem);line-height:1.15;margin:0 0 8px;letter-spacing:-.04em}
+header p{margin:0;color:var(--muted)}
+.panel{background:#fff;border:1px solid var(--line);border-radius:18px;padding:24px;box-shadow:0 8px 30px #25304a0a;margin:16px 0}
+.panel h2{font-size:1.1rem;margin:0 0 16px}
+.fields{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end}
+label{display:block;font-size:.84rem;font-weight:650;margin-bottom:5px}
+input,select,textarea{width:100%;padding:11px 12px;border:1px solid #cfd5df;border-radius:10px;font:inherit;outline:none;background:white}
+textarea{min-height:150px;resize:vertical}
+input:focus,select:focus,textarea:focus{border-color:var(--purple);box-shadow:0 0 0 3px #6754db22}
+button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:11px 16px;cursor:pointer;transition:transform .08s,background .15s}
+button:active{transform:translateY(1px)}
+button:disabled{opacity:.6;cursor:wait}
+.primary{background:var(--purple);color:white}
+.primary:hover{background:var(--purple-dark)}
+.subtle{background:#f0efff;color:var(--purple-dark)}
+.subtle:hover{background:#e7e4ff}
+.danger{background:#fff0f1;color:var(--red)}
+.small{padding:7px 10px;font-size:.85rem}
+.form-message{min-height:1.4em;color:var(--red);font-size:.88rem;margin:7px 0 0}
+.stats{display:flex;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:.9rem;margin:0 0 14px}
+.pill{background:#f1f3f8;border-radius:99px;padding:4px 10px}
+.card{min-height:220px;border:1px solid var(--line);border-radius:15px;background:linear-gradient(145deg,#fff,#fbfaff);padding:26px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.eyebrow{font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-weight:750}
+.word{font-size:clamp(2rem,7vw,3.25rem);font-weight:800;letter-spacing:-.04em;margin:9px 0 14px;overflow-wrap:anywhere}
+.progress{color:var(--muted);font-size:.9rem}
+.answer{margin-top:10px;padding-top:12px;border-top:1px solid var(--line);width:100%;font-size:1.1rem;font-weight:700;color:var(--purple-dark)}
+.actions{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+.actions button{min-width:145px}
+.success{color:var(--green)}
+.empty{color:var(--muted);text-align:center;padding:30px 10px}
+.list-head{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+.list-head h2{margin:0}
+.category-list{display:grid;gap:10px;margin-top:16px}
+.category-group{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.category-group summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px;font-weight:750;background:#fafaff}
+.category-group summary::-webkit-details-marker{display:none}
+.category-group summary:after{content:"＋";color:var(--purple);font-size:1.2rem}
+.category-group[open] summary:after{content:"−"}
+.category-group summary span:last-child{font-size:.85rem;color:var(--muted);font-weight:500}
+.category-words{padding:0 16px 8px}
+.word-row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:11px 0;border-top:1px solid var(--line)}
+.word-pair{min-width:0}
+.word-pair strong{display:block;overflow-wrap:anywhere}
+.word-pair span,.row-meta{font-size:.86rem;color:var(--muted);overflow-wrap:anywhere}
+.row-meta{display:block}
+.row-meta.success{color:var(--green)}
+.bulk-help{color:var(--muted);font-size:.9rem;margin:0 0 12px}
+.bulk-tools{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-top:12px}
+.bulk-tools>div{flex:1 1 220px}
+.preview-wrap{overflow-x:auto;margin-top:14px}
+.preview-table{width:100%;border-collapse:collapse;min-width:560px}
+.preview-table th,.preview-table td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-align:middle}
+.preview-table th{font-size:.85rem;color:var(--muted)}
+.preview-table input{min-width:120px}
+.preview-table td:last-child{width:1%}
+.hidden{display:none!important}
+footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
+@media(max-width:700px){
+  .wrap{margin-top:26px}
+  .panel{padding:18px}
+  .fields{grid-template-columns:1fr 1fr}
+  .fields button{grid-column:1/-1}
+  .actions button{flex:1}
 }
+</style>
+</head>
+<body>
+<main class="wrap">
+<header>
+  <h1>Angielskie fiszki</h1>
+  <p>Dodawaj słówka pojedynczo albo wklej całą listę. Wybierz kategorię i ucz się działami.</p>
+</header>
+
+<section class="panel">
+  <h2>Dodaj pojedyncze słówko</h2>
+  <form id="word-form" class="fields">
+    <div>
+      <label for="english">Angielski</label>
+      <input id="english" autocomplete="off" placeholder="np. apple" maxlength="80" required>
+    </div>
+    <div>
+      <label for="polish">Polski</label>
+      <input id="polish" autocomplete="off" placeholder="np. jabłko" maxlength="120" required>
+    </div>
+    <div>
+      <label for="category">Kategoria</label>
+      <input id="category" list="category-options" autocomplete="off" placeholder="np. Jedzenie" maxlength="60" required>
+      <datalist id="category-options"></datalist>
+    </div>
+    <button class="primary" type="submit">Dodaj</button>
+  </form>
+  <p id="form-message" class="form-message" aria-live="polite"></p>
+</section>
+
+<section class="panel">
+  <h2>Dodaj całą listę</h2>
+  <p class="bulk-help">
+    Wklej słówka w osobnych wierszach, np. <code>surprised - zaskoczony</code>.
+    Możesz użyć myślnika, tabulatora, średnika lub dwukropka.
+    Nagłówki działów są wykrywane automatycznie i przypisywane kolejnym słówkom.
+    W podglądzie możesz zmienić typ wiersza lub kategorię.
+  </p>
+
+  <div class="bulk-tools">
+    <div>
+      <label for="photo-input">Wybierz zdjęcie strony z listą słówek</label>
+      <input id="photo-input" type="file" accept="image/*">
+    </div>
+    <button id="ocr-button" class="subtle" type="button">Odczytaj tekst ze zdjęcia</button>
+  </div>
+  <p id="ocr-status" class="form-message" aria-live="polite"></p>
+
+  <label for="bulk-text">Tekst listy</label>
+  <textarea id="bulk-text" placeholder="surprised - zaskoczony&#10;dangerous - niebezpieczny&#10;improve - poprawiać"></textarea>
+
+  <div class="bulk-tools">
+    <div>
+      <label for="word-order">Kolejność w wierszach</label>
+      <select id="word-order">
+        <option value="auto">Wykryj automatycznie</option>
+        <option value="en-first">Najpierw angielski</option>
+        <option value="pl-first">Najpierw polski</option>
+      </select>
+    </div>
+    <div>
+      <label for="bulk-category">Kategoria dla wklejanych słówek</label>
+      <input id="bulk-category" list="category-options" placeholder="np. Nowe słówka" maxlength="60">
+    </div>
+    <button id="preview-button" class="subtle" type="button">Pokaż podgląd</button>
+  </div>
+
+  <div id="preview-area" class="hidden"></div>
+  <p id="bulk-message" class="form-message" aria-live="polite"></p>
+</section>
+
+<section class="panel">
+  <h2>Test wiedzy</h2>
+  <div style="max-width:360px;margin-bottom:14px">
+    <label for="quiz-category">Ucz się z kategorii</label>
+    <select id="quiz-category"></select>
+  </div>
+  <div id="quiz-stats" class="stats"></div>
+  <div id="quiz-card" class="card" aria-live="polite"></div>
+  <div id="quiz-actions" class="actions"></div>
+</section>
+
+<section class="panel">
+  <div class="list-head">
+    <h2>Twoje słówka <span id="list-count"></span></h2>
+    <button id="repeat-button" class="subtle small" type="button" hidden>Jeszcze raz</button>
+  </div>
+  <div id="word-list" class="category-list"></div>
+</section>
+
+<footer>Lista i postęp zapisują się automatycznie w tej przeglądarce.</footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script>
+(() => {
+  const KEY = "angielskie-fiszki-v1";
+  const OLD_KEY = "angielskie-fiszki";
+
+  const form = document.querySelector("#word-form");
+  const englishInput = document.querySelector("#english");
+  const polishInput = document.querySelector("#polish");
+  const categoryInput = document.querySelector("#category");
+  const message = document.querySelector("#form-message");
+  const card = document.querySelector("#quiz-card");
+  const actions = document.querySelector("#quiz-actions");
+  const stats = document.querySelector("#quiz-stats");
+  const list = document.querySelector("#word-list");
+  const count = document.querySelector("#list-count");
+  const filter = document.querySelector("#quiz-category");
+  const repeatButton = document.querySelector("#repeat-button");
+  const photoInput = document.querySelector("#photo-input");
+  const ocrButton = document.querySelector("#ocr-button");
+  const ocrStatus = document.querySelector("#ocr-status");
+
+  let words = [];
+  let currentId = null;
+  let lastId = null;
+  let revealed = false;
+  let previewRows = [];
+
+  try {
+    const saved = JSON.parse(
+      localStorage.getItem(KEY) || localStorage.getItem(OLD_KEY) || "[]"
+    );
+
+    if (Array.isArray(saved)) {
+      words = saved
+        .filter(word => word && typeof word.en === "string" && typeof word.pl === "string")
+        .map((word, index) => ({
+          id: String(word.id || `old-${index}-${Math.random()}`),
+          en: word.en,
+          pl: word.pl,
+          category: (word.category || "Ogólne").trim(),
+          streak: Math.max(0, Math.min(3, Number(word.streak) || 0))
+        }));
+    }
+  } catch {
+    words = [];
+  }
+
+  function save() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(words));
+    } catch {
+      message.textContent = "Nie udało się zapisać zmian w przeglądarce.";
+    }
+  }
+
+  function categories() {
+    return [...new Set(words.map(word => word.category))]
+      .sort((a, b) => a.localeCompare(b, "pl"));
+  }
+
+  function updateCategoryMenus() {
+    const allCategories = categories();
+    const previousFilter = filter.value;
+
+    filter.replaceChildren();
+
+    const allOption = document.createElement("option");
+    allOption.value = "Wszystkie";
+    allOption.textContent = "Wszystkie kategorie";
+    filter.appendChild(allOption);
+
+    allCategories.forEach(category => {
+      const option = document.createElement("option");
+      option.value = category;
+      option.textContent = category;
+      filter.appendChild(option);
+    });
+
+    filter.value = allCategories.includes(previousFilter)
+      ? previousFilter
+      : "Wszystkie";
+
+    const datalist = document.querySelector("#category-options");
+    datalist.replaceChildren();
+
+    allCategories.forEach(category => {
+      const option = document.createElement("option");
+      option.value = category;
+      datalist.appendChild(option);
+    });
+  }
+
+  function selectedWords() {
+    return filter.value === "Wszystkie"
+      ? words
+      : words.filter(word => word.category === filter.value);
+  }
+
+  function activeWords() {
+    return selectedWords().filter(word => word.streak < 3);
+  }
+
+  function chooseWord() {
+    const active = activeWords();
+    if (!active.length) return null;
+
+    let choices = active.filter(word => word.id !== lastId);
+    if (!choices.length) choices = active;
+
+    const chosen = choices[Math.floor(Math.random() * choices.length)];
+    currentId = chosen.id;
+    return chosen;
+  }
+
+  function render() {
+    updateCategoryMenus();
+    renderList();
+
+    const pool = selectedWords();
+    const todo = activeWords();
+
+    stats.replaceChildren();
+    [`Do nauki: ${todo.length}`, `Opanowane: ${pool.length - todo.length}`]
+      .forEach(text => {
+        const pill = document.createElement("span");
+        pill.className = "pill";
+        pill.textContent = text;
+        stats.appendChild(pill);
+      });
+
+    let word = words.find(item =>
+      item.id === currentId &&
+      item.streak < 3 &&
+      (filter.value === "Wszystkie" || item.category === filter.value)
+    );
+
+    if (!word) word = chooseWord();
+
+    actions.replaceChildren();
+
+    if (!word) {
+      card.innerHTML = pool.length
+        ? '<div><div class="eyebrow">Gotowe!</div><div class="word success">Wszystkie słówka opanowane 🎉</div><div class="progress">Kliknij „Jeszcze raz”, aby wrócić do powtórek.</div></div>'
+        : '<div><div class="eyebrow">Zacznij tutaj</div><div class="word">Brak słówek w tej kategorii</div><div class="progress">Dodaj słówka albo wybierz inną kategorię.</div></div>';
+      return;
+    }
+
+    card.innerHTML = `
+      <div>
+        <div class="eyebrow"></div>
+        <div class="word"></div>
+        <div class="progress"></div>
+        <div class="answer hidden"></div>
+      </div>
+    `;
+
+    card.querySelector(".eyebrow").textContent =
+      `Przetłumacz na angielski · ${word.category}`;
+    card.querySelector(".word").textContent = word.pl;
+    card.querySelector(".progress").textContent = `Umiem: ${word.streak}/3`;
+
+    const answer = card.querySelector(".answer");
+    answer.textContent = word.en;
+    answer.classList.toggle("hidden", !revealed);
+
+    if (!revealed) {
+      const show = document.createElement("button");
+      show.className = "primary";
+      show.textContent = "Pokaż tłumaczenie";
+      show.onclick = () => {
+        revealed = true;
+        render();
+      };
+      actions.appendChild(show);
+    } else {
+      const no = document.createElement("button");
+      no.className = "subtle";
+      no.textContent = "Nie umiem";
+      no.onclick = () => answerWord(false);
+
+      const yes = document.createElement("button");
+      yes.className = "primary";
+      yes.textContent = "Umiem";
+      yes.onclick = () => answerWord(true);
+
+      actions.append(no, yes);
+    }
+  }
+
+  function answerWord(know) {
+    const word = words.find(item => item.id === currentId);
+    if (!word) return;
+
+    lastId = word.id;
+    word.streak = know ? Math.min(3, word.streak + 1) : 0;
+    currentId = null;
+    revealed = false;
+    save();
+    render();
+  }
+
+  function resetMastered() {
+    words.forEach(word => {
+      if (
+        word.streak === 3 &&
+        (filter.value === "Wszystkie" || word.category === filter.value)
+      ) {
+        word.streak = 0;
+      }
+    });
+
+    lastId = null;
+    currentId = null;
+    revealed = false;
+    save();
+    render();
+  }
+
+  repeatButton.addEventListener("click", resetMastered);
+
+  function renderList() {
+    count.textContent = `(${words.length})`;
+
+    const selected = filter.value;
+    const mastered = words.filter(word =>
+      word.streak === 3 &&
+      (selected === "Wszystkie" || word.category === selected)
+    ).length;
+
+    repeatButton.hidden = mastered === 0;
+    repeatButton.textContent = `Jeszcze raz (${mastered})`;
+    list.replaceChildren();
+
+    if (!words.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = "Twoja lista jest pusta. Dodaj pierwsze słówko powyżej.";
+      list.appendChild(empty);
+      return;
+    }
+
+    categories().forEach(category => {
+      const group = document.createElement("details");
+      group.className = "category-group";
+
+      const summary = document.createElement("summary");
+      const title = document.createElement("span");
+      title.textContent = category;
+
+      const categoryWords = words.filter(word => word.category === category);
+      const amount = document.createElement("span");
+      amount.textContent =
+        `${categoryWords.length} ${categoryWords.length === 1 ? "słówko" : "słówek"}`;
+
+      summary.append(title, amount);
+      group.appendChild(summary);
+
+      const body = document.createElement("div");
+      body.className = "category-words";
+
+      categoryWords.forEach(word => {
+        const row = document.createElement("div");
+        row.className = "word-row";
+
+        const pair = document.createElement("div");
+        pair.className = "word-pair";
+
+        const english = document.createElement("strong");
+        english.textContent = word.en;
+
+        const polish = document.createElement("span");
+        polish.textContent = word.pl;
+
+        const progress = document.createElement("span");
+        progress.className =
+          "row-meta" + (word.streak === 3 ? " success" : "");
+        progress.textContent = word.streak === 3
+          ? "Opanowane ✓"
+          : `${word.streak}/3 razy „Umiem”`;
+
+        pair.append(english, polish, progress);
+
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "danger small";
+        remove.textContent = "Usuń";
+        remove.setAttribute("aria-label", `Usuń słówko ${word.en}`);
+        remove.onclick = () => {
+          words = words.filter(item => item.id !== word.id);
+          if (currentId === word.id) currentId = null;
+          save();
+          render();
+        };
+
+        row.append(pair, remove);
+        body.appendChild(row);
+      });
+
+      group.appendChild(body);
+      list.appendChild(group);
+    });
+  }
+
+  function isHeading(line) {
+    return /^(unit|chapter|lesson|section|vocabulary|words|dział|rozdział|lekcja|słówka|słownictwo)\b/i.test(line) ||
+      (/^[A-ZĄĆĘŁŃÓŚŹŻ0-9\s:.-]+$/.test(line) &&
+       /[A-ZĄĆĘŁŃÓŚŹŻ]{2}/.test(line) &&
+       line.length < 70);
+  }
+
+  function headingName(line) {
+    return line
+      .replace(/^(unit|chapter|lesson|section|vocabulary|words|dział|rozdział|lekcja|słówka|słownictwo)\s*\d*\s*[:.\-]?\s*/i, "")
+      .trim() || line.trim();
+  }
+
+  function parseLine(line) {
+    let parts = line.split(/\t+|\s+[–—-]\s+|\s*[:;|]\s*/);
+
+    if (parts.length < 2) {
+      parts = line.split(/\s*[–—-]\s*/);
+    }
+
+    if (parts.length < 2) {
+      const match = line.trim().match(/^(\S+)\s+(.+)$/);
+      if (!match) return [line.trim(), ""];
+      parts = [match[1], match[2]];
+    }
+
+    let left = parts.shift().trim();
+    let right = parts.join(" - ").trim();
+
+    function removePronunciation(text) {
+      return text
+        .replace(/\[[^\]]*\]/g, " ")
+        .replace(/\/[^/]+\//g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    left = removePronunciation(left);
+    right = removePronunciation(right);
+
+    const order = document.querySelector("#word-order").value;
+    const polishCharacters = /[ąćęłńóśźż]/i;
+
+    if (order === "pl-first") return [right, left];
+    if (order === "en-first") return [left, right];
+
+    if (polishCharacters.test(left) && !polishCharacters.test(right)) {
+      return [right, left];
+    }
+
+    return [left, right];
+  }
+
+  function parseText(text) {
+    let category =
+      document.querySelector("#bulk-category").value.trim() || "Ogólne";
+
+    const rows = [];
+
+    text.split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean)
+      .forEach(line => {
+        if (isHeading(line)) {
+          category = headingName(line);
+          rows.push({
+            type: "heading",
+            en: category,
+            pl: "",
+            category
+          });
+          return;
+        }
+
+        const [en, pl] = parseLine(line);
+        rows.push({
+          type: "word",
+          en,
+          pl,
+          category
+        });
+      });
+
+    return rows;
+  }
+
+  function showPreview() {
+    const area = document.querySelector("#preview-area");
+    const message = document.querySelector("#bulk-message");
+
+    previewRows = parseText(document.querySelector("#bulk-text").value);
+    message.textContent = "";
+
+    if (!previewRows.length) {
+      message.textContent = "Wklej najpierw listę słówek.";
+      area.classList.add("hidden");
+      return;
+    }
+
+    renderPreview();
+  }
+
+  function renderPreview() {
+    const area = document.querySelector("#preview-area");
+    area.replaceChildren();
+    area.classList.remove("hidden");
+
+    const table = document.createElement("table");
+    table.className = "preview-table";
+
+    const head = document.createElement("thead");
+    head.innerHTML =
+      "<tr><th>Typ</th><th>Angielski / nazwa działu</th><th>Polski</th><th>Kategoria</th><th></th></tr>";
+    table.appendChild(head);
+
+    const body = document.createElement("tbody");
+
+    previewRows.forEach((row, index) => {
+      const tableRow = document.createElement("tr");
+
+      const typeCell = document.createElement("td");
+      const type = document.createElement("select");
+
+      [
+        ["word", "Słówko"],
+        ["heading", "Nazwa działu"]
+      ].forEach(([value, label]) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        type.appendChild(option);
+      });
+
+      type.value = row.type;
+      type.onchange = () => {
+        row.type = type.value;
+        if (row.type === "heading") {
+          row.category = row.en;
+          row.pl = "";
+        }
+        renderPreview();
+      };
+
+      typeCell.appendChild(type);
+      tableRow.appendChild(typeCell);
+
+      ["en", "pl", "category"].forEach(key => {
+        const cell = document.createElement("td");
+        const input = document.createElement("input");
+
+        input.value = row[key] || "";
+        input.placeholder =
+          key === "en" ? "Angielskie słówko lub dział" :
+          key === "pl" ? "Polskie tłumaczenie" :
+          "Kategoria";
+
+        input.addEventListener("input", () => {
+          row[key] = input.value;
+          if (row.type === "heading" && key === "en") {
+            row.category = input.value;
+          }
+        });
+
+        cell.appendChild(input);
+        tableRow.appendChild(cell);
+      });
+
+      const removeCell = document.createElement("td");
+      const removeButton = document.createElement("button");
+      removeButton.type = "button";
+      removeButton.className = "danger small";
+      removeButton.textContent = "Usuń";
+      removeButton.onclick = () => {
+        previewRows.splice(index, 1);
+        renderPreview();
+      };
+
+      removeCell.appendChild(removeButton);
+      tableRow.appendChild(removeCell);
+      body.appendChild(tableRow);
+    });
+
+    table.appendChild(body);
+
+    const wrap = document.createElement("div");
+    wrap.className = "preview-wrap";
+    wrap.appendChild(table);
+    area.appendChild(wrap);
+
+    const addButton = document.createElement("button");
+    addButton.type = "button";
+    addButton.className = "primary";
+    addButton.textContent = "Dodaj słówka z podglądu";
+    addButton.style.marginTop = "12px";
+    addButton.onclick = importRows;
+    area.appendChild(addButton);
+  }
+
+  function importRows() {
+    let added = 0;
+    let skipped = 0;
+
+    previewRows.forEach(row => {
+      if (row.type === "heading") return;
+
+      const en = (row.en || "").trim();
+      const pl = (row.pl || "").trim();
+      const category = (row.category || "").trim() || "Ogólne";
+
+      if (!en || !pl) {
+        skipped++;
+        return;
+      }
+
+      const duplicate = words.some(word =>
+        word.en.toLocaleLowerCase() === en.toLocaleLowerCase() &&
+        word.category.toLocaleLowerCase() === category.toLocaleLowerCase()
+      );
+
+      if (duplicate) {
+        skipped++;
+        return;
+      }
+
+      words.push({
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+        en,
+        pl,
+        category,
+        streak: 0
+      });
+
+      added++;
+    });
+
+    save();
+
+    document.querySelector("#bulk-text").value = "";
+    document.querySelector("#bulk-category").value = "";
+    document.querySelector("#preview-area").replaceChildren();
+    document.querySelector("#preview-area").classList.add("hidden");
+    previewRows = [];
+
+    document.querySelector("#bulk-message").textContent =
+      `Dodano: ${added}. Pominięto pustych lub już istniejących: ${skipped}.`;
+
+    render();
+  }
+
+  document.querySelector("#preview-button")
+    .addEventListener("click", showPreview);
+
+  async function prepareImage(file) {
+    if (!window.createImageBitmap) return file;
+
+    const bitmap = await createImageBitmap(file);
+    const maxSide = 2600;
+    const scale = Math.min(
+      2,
+      Math.max(1, maxSide / Math.max(bitmap.width, bitmap.height))
+    );
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+
+    for (let i = 0; i < pixels.data.length; i += 4) {
+      const gray =
+        0.299 * pixels.data[i] +
+        0.587 * pixels.data[i + 1] +
+        0.114 * pixels.data[i + 2];
+
+      const contrast = Math.max(0, Math.min(255, (gray - 128) * 1.25 + 128));
+      pixels.data[i] = contrast;
+      pixels.data[i + 1] = contrast;
+      pixels.data[i + 2] = contrast;
+    }
+
+    context.putImageData(pixels, 0, 0);
+    return canvas;
+  }
+
+  ocrButton.addEventListener("click", async () => {
+    const file = photoInput.files && photoInput.files[0];
+
+    if (!file) {
+      ocrStatus.textContent = "Najpierw wybierz zdjęcie.";
+      return;
+    }
+
+    if (!window.Tesseract) {
+      ocrStatus.textContent =
+        "Nie udało się załadować OCR. Sprawdź połączenie z internetem i odśwież stronę.";
+      return;
+    }
+
+    ocrButton.disabled = true;
+    ocrStatus.textContent = "Uruchamiam rozpoznawanie tekstu…";
+
+    let worker;
+
+    try {
+      worker = await Tesseract.createWorker("eng+pol", 1, {
+        logger: progress => {
+          if (progress.status === "recognizing text") {
+            const percent = Math.round((progress.progress || 0) * 100);
+            ocrStatus.textContent = `Odczytuję tekst ze zdjęcia: ${percent}%`;
+          }
+        }
+      });
+
+      ocrStatus.textContent = "Poprawiam zdjęcie przed odczytem…";
+      const image = await prepareImage(file);
+      const result = await worker.recognize(image);
+      const recognized = (result.data.text || "").trim();
+
+      if (!recognized) {
+        ocrStatus.textContent =
+          "Nie udało się odczytać tekstu. Spróbuj wyraźniejszego zdjęcia.";
+        return;
+      }
+
+      const textarea = document.querySelector("#bulk-text");
+      textarea.value = textarea.value.trim()
+        ? textarea.value.trim() + "\n" + recognized
+        : recognized;
+
+      ocrStatus.textContent =
+        "Tekst odczytany. Sprawdź kolejność języków i popraw błędy, potem kliknij „Pokaż podgląd”. Układ kolumn może wymagać ręcznej korekty.";
+    } catch {
+      ocrStatus.textContent =
+        "Odczyt się nie powiódł. Sprawdź internet lub spróbuj wyraźniejszego zdjęcia.";
+    } finally {
+      if (worker) await worker.terminate();
+      ocrButton.disabled = false;
+    }
+  });
+
+  filter.addEventListener("change", () => {
+    currentId = null;
+    lastId = null;
+    revealed = false;
+    render();
+  });
+
+  form.addEventListener("submit", event => {
+    event.preventDefault();
+
+    const en = englishInput.value.trim();
+    const pl = polishInput.value.trim();
+    const category = categoryInput.value.trim() || "Ogólne";
+
+    const duplicate = words.some(word =>
+      word.en.toLocaleLowerCase() === en.toLocaleLowerCase() &&
+      word.category.toLocaleLowerCase() === category.toLocaleLowerCase()
+    );
+
+    if (duplicate) {
+      message.textContent = "To słówko jest już w tej kategorii.";
+      return;
+    }
+
+    words.push({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+      en,
+      pl,
+      category,
+      streak: 0
+    });
+
+    message.textContent = "Dodano słówko.";
+    form.reset();
+    save();
+    render();
+    englishInput.focus();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
