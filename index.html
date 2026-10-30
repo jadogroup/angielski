@@ -66,6 +66,8 @@ button:active{transform:translateY(1px)}
 .preview-table td:last-child{width:1%}
 .hidden{display:none!important}
 footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
+.privacy-link{color:inherit;text-decoration:none;opacity:.72;margin-left:8px}
+.privacy-link:hover{opacity:1;text-decoration:underline}
 @media(max-width:700px){
   .wrap{margin-top:26px}
   .panel{padding:18px}
@@ -111,7 +113,6 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
     Nagłówki działów są wykrywane automatycznie i przypisywane kolejnym słówkom.
     W podglądzie możesz zmienić typ wiersza lub kategorię.
   </p>
-  <label for="bulk-text">Lista słówek</label>
   <textarea id="bulk-text" placeholder="surprised - zaskoczony&#10;dangerous - niebezpieczny&#10;improve - poprawiać"></textarea>
   <div class="bulk-tools">
     <div>
@@ -122,6 +123,8 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
         <option value="pl-first">Najpierw polski</option>
       </select>
     </div>
+  </div>
+  <div class="bulk-tools">
     <div>
       <label for="bulk-category">Kategoria dla wklejanych słówek</label>
       <input id="bulk-category" list="category-options" placeholder="np. Nowe słówka" maxlength="60">
@@ -151,7 +154,10 @@ footer{font-size:.82rem;color:var(--muted);text-align:center;margin-top:20px}
   <div id="word-list" class="category-list"></div>
 </section>
 
-<footer>Lista i postęp zapisują się automatycznie w tej przeglądarce.</footer>
+<footer>
+  Lista i postęp zapisują się automatycznie w tej przeglądarce.
+  <a class="privacy-link" href="https://jadogroup.github.io/polityka-prywatnosci-learnis/" target="_blank" rel="noopener noreferrer">Polityka prywatności</a>
+</footer>
 </main>
 
 <script>
